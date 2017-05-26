@@ -25,6 +25,7 @@ default_vs_can = None
 
 vs_can_path = 'nv_navigation_gmock_unit_test_services/source_mirror/vs__vehicle/inc/vs/can/protocol.h'
 coral_path  = 'CORAL_CELL/inc/CoralCell.h'
+hmi_path    = 'ui_vp4__hmi_mdl_exp/guide_api/API.xml'
 
 path_from_workspace = lambda ws_dir, path: os.path.join(ws_dir, reduce(os.path.join, path.split('/')))
 
@@ -145,6 +146,7 @@ class CodeMessageReplacer:
 		# if schema_path is None:
 		if wspace_path is None:
 			self.events_dec = eval(bz2.decompress(binascii.unhexlify(default_vs_can)))
+			print("vs_can replacer used default")
 		else:
 			self.getid = re.compile(' \d+')
 			self.getidhex = re.compile(' 0[xX][0-9a-fA-F]+')
@@ -160,9 +162,10 @@ class CodeMessageReplacer:
 								self.events_dec[int(split_line[2])] = split_line[0]
 							except IndexError:
 								pass
+				print('vs_can replacer load %s' % schema_path)
 			except FileNotFoundError:
-				print("warning: %s not readed" % schema_path)
-				pass
+				self.events_dec = eval(bz2.decompress(binascii.unhexlify(default_vs_can)))
+				print("vs_can replacer used default")
 	def replace_in_line(self, indexer, line):
 		'''
 			replace one code in one line
@@ -206,6 +209,7 @@ class CoralCellReplacer:
 		self.events = {}
 		if wspace_path is None:
 			self.events = eval(bz2.decompress(binascii.unhexlify(default_coral)))
+			print('coral raplacer used default')
 		else:
 			define   = re.compile("[ \t]*#define")
 			redefine = re.compile("[A-Z_]+")
@@ -226,8 +230,10 @@ class CoralCellReplacer:
 							elif num[-1] == 'U' or num[-1] == 'u':
 								num = int(num[:-1], 0)
 							self.events[num] = schema[2]
+				print('coral replacer load from %s' % schema_path)
 			except FileNotFoundError:
-				print("warning: %s not readed" % schema_path)
+				self.events = eval(bz2.decompress(binascii.unhexlify(default_coral)))
+				print('coral raplacer used default')
 	def replace_in_line(self, indexer, line):
 		if len(self.events) == 0:
 			return
@@ -255,18 +261,22 @@ class CoralCellReplacer:
 			return
 
 class HmiEvtCodeMessageReplacer:
-	def __init__(self, schema_path):
-		# read "API.xml" and fill in the dictionary
+	def __init__(self, wspace_path):
 		self.events = {}
 		self.dataPool = {}
 		self.getid = re.compile('\d+')
 		splitter = re.compile('\/\/|\/|,')
-		if schema_path is None:
-			data = eval(bz2.decompress(binascii.unhexlify(default_hmi)))
-			self.events = data[0]
-			self.dataPool = data[1]
+		# uncomment this to allow default value
+		def use_default():
+			# data = eval(bz2.decompress(binascii.unhexlify(default_hmi)))
+			# self.events = data[0]
+			# self.dataPool = data[1]
+			pass
+		if wspace_path is None:
+			use_default()
 		else:
 			try:
+				schema_path = path_from_workspace(wspace_path, hmi_path)
 				tree = ET.parse(schema_path)
 				root = tree.getroot()
 				#getting all the HMI events
@@ -290,9 +300,8 @@ class HmiEvtCodeMessageReplacer:
 					print('warning: in API.xml datapool properties has no dpID')
 				elif id_in > 0 and id_out > 0:
 					print('warning: in API.xml datapool contain property without dpID')
-	
-	
 			except FileNotFoundError:
+				use_default()
 				print("warning: '%s' not read" % schema_path)
 
 	def replace_in_line(self, indexer, line):
@@ -464,7 +473,7 @@ def main():
 	if global_conf.allow_replace:
 		replacers = [
 				CodeMessageReplacer(args['w']),
-				HmiEvtCodeMessageReplacer(args['api']),
+				HmiEvtCodeMessageReplacer(args['w']),
 				CoralCellReplacer(args['w'])
 			]
 	else:
