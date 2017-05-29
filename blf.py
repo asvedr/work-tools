@@ -16,7 +16,7 @@ import datetime
 import time
 from functools import reduce
 import sys
-import argsparse
+import argparse
 
 #from can.message import Message
 #from can.CAN import Listener
@@ -78,8 +78,8 @@ def systemtime_to_timestamp(systemtime):
 class Message(object):
     def __init__(self, **args):
         self.timestamp       = args['timestamp']
-        self.arbitration_id  = args.get(arbitration_id, 0)
-        self.extended_id     = args.get('extended_id', False)
+        self.arbitration_id  = args.get('arbitration_id', 0)
+        self.is_extended_id  = args.get('extended_id', False)
         self.is_remote_frame = args.get('is_remote_frame', False)
         self.dlc             = args.get('dlc', 0)
         self.data            = args.get('data', [])
@@ -191,7 +191,7 @@ def totxt(ipath,opath):
             header.write(mess2s(mess))
             header.write('\n')
 
-parser = argsparse.ArgumentParser(description='convert .blf to .txt')
+parser = argparse.ArgumentParser(description='convert .blf to .txt')
 parser.add_argument('blf', help='binary blf file, input')
 parser.add_argument('txt', help='output')
 
