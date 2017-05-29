@@ -14,9 +14,12 @@ import struct
 import zlib
 import datetime
 import time
+from functools import reduce
+import sys
+import argsparse
 
-from can.message import Message
-from can.CAN import Listener
+#from can.message import Message
+#from can.CAN import Listener
 
 
 # 0 = unknown, 2 = CANoe
@@ -71,6 +74,16 @@ def systemtime_to_timestamp(systemtime):
         return time.mktime(t.timetuple()) + systemtime[7] / 1000.0
     except ValueError:
         return 0
+
+class Message(object):
+    def __init__(self, **args):
+        self.timestamp       = args['timestamp']
+        self.arbitration_id  = args.get(arbitration_id, 0)
+        self.extended_id     = args.get('extended_id', False)
+        self.is_remote_frame = args.get('is_remote_frame', False)
+        self.dlc             = args.get('dlc', 0)
+        self.data            = args.get('data', [])
+        self.is_error_frame  = args.get('is_error_frame', False)
 
 class BLFReader(object):
     """
@@ -145,122 +158,6 @@ class BLFReader(object):
         self.fp.close()
 
 
-class BLFWriter(Listener):
-    """
-    Logs CAN data to a Binary Logging File compatible with Vector's tools.
-    """
-
-    #: Max log container size of uncompressed data
-    MAX_CACHE_SIZE = 0x20000
-
-    #: ZLIB compression level
-    COMPRESSION_LEVEL = 7
-
-    def __init__(self, filename, channel=1):
-        self.fp = open(filename, "wb")
-        self.channel = channel
-        # Header will be written after log is done
-        self.fp.write(b"\x00" * FILE_HEADER_STRUCT.size)
-        self.cache = []
-        self.cache_size = 0
-        self.count_of_objects = 0
-        self.uncompressed_size = FILE_HEADER_STRUCT.size
-        self.start_timestamp = None
-        self.stop_timestamp = None
-
-    def on_message_received(self, msg):
-        if not msg.is_error_frame:
-            flags = REMOTE_FLAG if msg.is_remote_frame else 0
-            arb_id = msg.arbitration_id
-            if msg.id_type:
-                arb_id |= CAN_MSG_EXT
-            data = CAN_MSG_STRUCT.pack(self.channel, flags, msg.dlc, arb_id,
-                                       bytes(msg.data))
-            self._add_object(CAN_MESSAGE, data, msg.timestamp)
-        else:
-            data = CAN_ERROR_STRUCT.pack(self.channel, 0)
-            self._add_object(CAN_ERROR, data, msg.timestamp)
-
-    def log_event(self, text, timestamp=None):
-        """Add an arbitrary message to the log file as a global marker.
-
-        :param str text:
-            The group name of the marker.
-        :param float timestamp:
-            Absolute timestamp in Unix timestamp format. If not given, the
-            marker will be placed along the last message.
-        """
-        try:
-            # Only works on Windows
-            text = text.encode("mbcs")
-        except LookupError:
-            text = text.encode("ascii")
-        comment = b"Added by python-can"
-        marker = b"python-can"
-        data = GLOBAL_MARKER_STRUCT.pack(
-            0, 0xFFFFFF, 0xFF3300, 0, len(text), len(marker), len(comment))
-        self._add_object(GLOBAL_MARKER, data + text + marker + comment, timestamp)
-
-
-    def _add_object(self, obj_type, data, timestamp=None):
-        if timestamp is None:
-            timestamp = self.stop_timestamp or time.time()
-        if self.start_timestamp is None:
-            self.start_timestamp = timestamp
-        self.stop_timestamp = timestamp
-        timestamp = int((timestamp - self.start_timestamp) * 1000000000)
-        obj_size = OBJ_HEADER_STRUCT.size + len(data)
-        header = OBJ_HEADER_STRUCT.pack(
-            b"LOBJ", OBJ_HEADER_STRUCT.size, 1, obj_size, obj_type,
-            2, 0, max(timestamp, 0))
-        self.cache.append(header)
-        self.cache.append(data)
-        padding_size = len(data) % 4
-        self.cache.append(b"\x00" * padding_size)
-        self.cache_size += obj_size + padding_size
-        self.count_of_objects += 1
-        if self.cache_size >= self.MAX_CACHE_SIZE:
-            self._flush()
-
-    def _flush(self):
-        """Compresses and writes data in the cache to file."""
-        cache = b"".join(self.cache)
-        if not cache:
-            # Nothing to write
-            return
-        uncompressed_data = cache[:self.MAX_CACHE_SIZE]
-        # Save data that comes after max size to next round
-        tail = cache[self.MAX_CACHE_SIZE:]
-        self.cache = [tail]
-        self.cache_size = len(tail)
-        compressed_data = zlib.compress(uncompressed_data,
-                                        self.COMPRESSION_LEVEL)
-        obj_size = OBJ_HEADER_STRUCT.size + len(compressed_data)
-        header = OBJ_HEADER_STRUCT.pack(
-            b"LOBJ", 16, 1, obj_size, LOG_CONTAINER, 2, 0, len(uncompressed_data))
-        self.fp.write(header)
-        self.fp.write(compressed_data)
-        # Write padding bytes
-        self.fp.write(b"\x00" * (obj_size % 4))
-        self.uncompressed_size += len(uncompressed_data) + OBJ_HEADER_STRUCT.size
-
-    def stop(self):
-        """Stops logging and closes the file."""
-        self._flush()
-        filesize = self.fp.tell()
-        self.fp.close()
-
-        # Write header in the beginning of the file
-        header = [b"LOGG", FILE_HEADER_STRUCT.size,
-                  APPLICATION_ID, 0, 0, 0, 2, 6, 8, 1]
-        # The meaning of "count of objects read" is unknown
-        header.extend([filesize, self.uncompressed_size,
-                       self.count_of_objects, 0])
-        header.extend(timestamp_to_systemtime(self.start_timestamp))
-        header.extend(timestamp_to_systemtime(self.stop_timestamp))
-        with open(self.fp.name, "r+b") as f:
-            f.write(FILE_HEADER_STRUCT.pack(*header))
-
 def int2s(cnt):
     def foo(val):
         val = hex(val)[2:]
@@ -269,9 +166,6 @@ def int2s(cnt):
                 val = '0' + val
         return val
     return foo
-
-from functools import reduce
-import sys
 
 head = ['timestamp', 'is_remote_frame', 'extended_id', 'is_error_frame', 'dlc', 'arbitration_id', 'data']
 head = reduce(lambda a,b: '%s\t%s' % (a,b), head)
@@ -297,4 +191,10 @@ def totxt(ipath,opath):
             header.write(mess2s(mess))
             header.write('\n')
 
-totxt(sys.argv[1], sys.argv[2])
+parser = argsparse.ArgumentParser(description='convert .blf to .txt')
+parser.add_argument('blf', help='binary blf file, input')
+parser.add_argument('txt', help='output')
+
+args = vars(parser.parse_args())
+
+totxt(args['blf'], args['txt'])
