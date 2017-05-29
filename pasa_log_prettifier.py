@@ -146,7 +146,7 @@ class CodeMessageReplacer:
 		# if schema_path is None:
 		if wspace_path is None:
 			self.events_dec = eval(bz2.decompress(binascii.unhexlify(default_vs_can)))
-			print("vs_can replacer used default")
+			print("vs_can replacer used default %s" % len(self.events_dec))
 		else:
 			self.getid = re.compile(' \d+')
 			self.getidhex = re.compile(' 0[xX][0-9a-fA-F]+')
