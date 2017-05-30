@@ -23,7 +23,8 @@ default_hmi    = None
 # hexlify(bz2(events dict))
 default_vs_can = None
 
-vs_can_path = 'nv_navigation_gmock_unit_test_services/source_mirror/vs__vehicle/inc/vs/can/protocol.h'
+vs_can_path = 'vs__vehicle/inc/vs/can/protocol.h'
+#'nv_navigation_gmock_unit_test_services/source_mirror/vs__vehicle/inc/vs/can/protocol.h'
 coral_path  = 'CORAL_CELL/inc/CoralCell.h'
 hmi_path    = 'ui_vp4__hmi_mdl_exp/guide_api/API.xml'
 
