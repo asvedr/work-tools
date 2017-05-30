@@ -1,15 +1,3 @@
-"""
-Implements support for BLF (Binary Logging Format) which is a proprietary
-CAN log format from Vector Informatik GmbH.
-
-No official specification of the binary logging format is available.
-This implementation is based on Toby Lorenz' C++ library "Vector BLF" which is
-licenced under GPLv3. https://bitbucket.org/tobylorenz/vector_blf.
-The file starts with a header. The rest is one or more "log containers"
-which consists of a header and some zlib compressed data, usually up to 128 kB
-of uncompressed data each. This data contains the actual CAN messages and other
-objects types.
-"""
 import struct
 import zlib
 import datetime
@@ -17,10 +5,6 @@ import time
 from functools import reduce
 import sys
 import argparse
-
-#from can.message import Message
-#from can.CAN import Listener
-
 
 # 0 = unknown, 2 = CANoe
 APPLICATION_ID = 5
