@@ -81,20 +81,19 @@ class Liners(object):
 		return self.header.__exit__(*args)
 
 def remake_log(input_path, output_path, time_from, time_to):
-	''' filter contents and replace code to message '''
+	''' save only lines in time interval '''
 	output = open(output_path, 'wt', encoding='utf-8') if output_path else sys.stdout
 
 	print(time_from, time_to)
 
-	#only for events from vs_can
-	#with open(input_path, 'r', encoding='cp1251') as header:
 	before = 0
 	used   = 0
 	after  = 0
 	out    = 0
 	with Liners(input_path) as lines:
-		#lines = list(header.readlines())
 		indexer = Indexer.try_lines(lines[1:16])
+		# время у логируемых строк иногда может быть непоследовательно
+		# поэтому нужно проверять каждую строчку на попадание в интервал
 		for line in lines:
 			log = line.split('/', maxsplit=indexer.maxsplit)
 			time = indexer.time(log)
@@ -116,13 +115,21 @@ def remake_log(input_path, output_path, time_from, time_to):
 	output.flush()
 	# output will automaticly closed correctly
 
-parser = argparse.ArgumentParser(description='', formatter_class=RawTextHelpFormatter)
+description = '''
+	Cut lines from log which in requested time interval.
+	For time check used time of HU, not time of logger
+	                    ^^^^^^^^^^
+'''
+
+parser = argparse.ArgumentParser(description=description, formatter_class=RawTextHelpFormatter)
 selfdir = os.path.dirname(__file__)
 parser.add_argument('-o', help='out file', default=None)
 parser.add_argument('log', help='log file', default=None)
-parser.add_argument('-f', help='time from hh:mm:ss', default=None)
-parser.add_argument('-t', help='time to hh:mm:ss', default=None)
+parser.add_argument('-f', help='time from hh:mm:ss[.mss]', default=None)
+parser.add_argument('-t', help='time to hh:mm:ss[.mss]', default=None)
 args = vars(parser.parse_args())
+
+# parse time and convert to microsecs
 def psecs(s):
 	t = s.split(':')
 	h = int(t[0])
