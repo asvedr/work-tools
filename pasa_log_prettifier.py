@@ -143,13 +143,14 @@ class CodeMessageReplacer:
 	def __init__(self, wspace_path):#schema_path):
 		# read "protocol.h" and make code-message pairs
 		self.events_dec = {}
+		self.events_out = set()
+		self.getid = re.compile(' \d+')
+		self.getidhex = re.compile(' 0[xX][0-9a-fA-F]+')
 		# if schema_path is None:
 		if wspace_path is None:
 			self.events_dec = eval(bz2.decompress(binascii.unhexlify(default_vs_can)))
 			print("vs_can replacer used default %s" % len(self.events_dec))
 		else:
-			self.getid = re.compile(' \d+')
-			self.getidhex = re.compile(' 0[xX][0-9a-fA-F]+')
 			splitter = re.compile('\/\/|\/|,')
 			schema_path = path_from_workspace(wspace_path, vs_can_path)
 			try:
@@ -190,6 +191,10 @@ class CodeMessageReplacer:
 							is_hex = True
 						except:
 							id = int(self.getid.match(byKeyword[1]).group())
+						if not (id in self.events_dec):
+							if id in self.events_out:
+								return
+							self.events_out.add(id)
 						id = '[%s(%s)]' % (self.events_dec[id], id)
 						line[indexer.message] = '%s%s%s' % (
 								byKeyword[0],
@@ -207,6 +212,7 @@ class CodeMessageReplacer:
 class CoralCellReplacer:
 	def __init__(self, wspace_path):
 		self.events = {}
+		self.events_out = set()
 		if wspace_path is None:
 			self.events = eval(bz2.decompress(binascii.unhexlify(default_coral)))
 			print('coral raplacer used default')
@@ -246,6 +252,10 @@ class CoralCellReplacer:
 					if byKeyword[1][0] == '[':
 						return True
 					key = int(byKeyword[1].strip(), 0)
+					if not (key in self.events):
+						if key in self.events_out:
+							return
+						self.events_out.add(key)
 					desc = self.events[key]
 					line[indexer.message] = '%s%s[%s(%s)]' % (
 							byKeyword[0],
@@ -253,6 +263,8 @@ class CoralCellReplacer:
 							desc,
 							byKeyword[1].strip()
 						)
+				except IndexError:
+					pass
 				except Exception as e:
 					if global_conf.allow_warn:
 						print('warning: replacing code in message(coral) "%s" has error: %s' % (message, e))
@@ -264,6 +276,8 @@ class HmiEvtCodeMessageReplacer:
 	def __init__(self, wspace_path):
 		self.events = {}
 		self.dataPool = {}
+		self.events_out = set()
+		self.pools_out = set()
 		self.getid = re.compile('\d+')
 		splitter = re.compile('\/\/|\/|,')
 		# uncomment this to allow default value
@@ -321,6 +335,10 @@ class HmiEvtCodeMessageReplacer:
 						id_field = byKeyword[1]
 						id = id_field.split('[')[0] # the only line difference with elif
 						id = int(self.getid.match(id).group())
+						if not (id in self.events):
+							if id in self.events_out:
+								return
+							self.events_out.add(id)
 						id = '[%s(%s)]' % (self.events[id], id)
 						line[indexer.message] = '%s%s%s' % (
 								byKeyword[0],
@@ -339,6 +357,10 @@ class HmiEvtCodeMessageReplacer:
 							# already replaced
 							return True
 						id = int(self.getid.match(byKeyword[1]).group())
+						if not (id in self.dataPool):
+							if id in self.pools_out:
+								return
+							self.pools_out.add(id)
 						id = '[%s(%s)]' % (self.dataPool[id], id)
 						line[indexer.message] = '%s%s%s' % (
 								byKeyword[0],
