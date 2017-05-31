@@ -6,9 +6,15 @@ import binascii
 import json
 import argparse
 from bitarray import bitarray
+import struct
+
+INT1 = struct.Struct('>B')
+INT2 = struct.Struct('>H')
+INT4 = struct.Struct('>I')
 
 def bits_to_int(bits):
-	acc = 0 
+	''' little endian to integer '''
+	acc = 0
 	for b in bits:
 		acc = (acc << 1) | b
 	return acc
@@ -136,6 +142,7 @@ class Utils(object):
 			print('NOT FOUND')
 
 def read_can(text):
+	''' read mess like this 03f 00 04 00 11 00 00 00 00 '''
 	split = text.split(' ')
 	key = int(split[0], 16)
 	split = split[1:]
@@ -149,26 +156,58 @@ def read_can(text):
 	val.frombytes(binascii.unhexlify(mess))
 	return (key,val)
 
-def test():
-	a = read_can("03F2 00 00 04 00 00 00")
-	b = read_can("03F2 00 10 04 00 00 00")
-	c = read_can("03F2 ff ff ff ff ff ff")
-	base = CANBase.arch('PNET')[0]
-	templ = base.get_id(list(base.all_id())[0])
-	print('keys:', templ.keys())
-	print(templ.compare(a,b,['ETC_CONTROL_STAT']))
-	utils = Utils('PNET')
-	utils.print_val(a)
-	utils.print_val(b)
-	utils.print_val(c)
-	# print(templ.compare(a,b,['key2']))
-	# print(templ.compare(a,b))
-	# print(templ.compare(a,c,['key2']))
+class MessageMask(object):
+	'''
+		use for .match message with template
+		note: this class doesn't check message id
+		only check value
+		for read_bytes used big endian
+	'''
+	def __init__(self, mask):
+		self.mask = mask
+
+	@classmethod
+	def read_bits(cls, text):
+		mask = [2 if (c == 'x' or c == 'X') else int(c) for c in text]
+		return cls(bytes(mask))
+
+	@classmethod
+	def read_bytes(cls, text):
+		mask = []		
+		for c in ''.join(text.split(' ')):
+			if c == 'x' or c == 'X':
+				mask.extend([2,2,2,2])
+			else:
+				txt = bin(int(c, 16))[2:]
+				val = [int(c, 10) for c in txt]
+				for _ in range(4 - len(val)):
+					txt = [0] + val
+				mask.extend(val)
+		return cls(bytes(mask))
+
+	def match(self, canmess):
+		mask = self.mask
+		# mess = canmess[1]
+		for i in range(64):
+			bit = mask[i]
+			if bit != 2 and bit != canmess[i]:
+				return False
+		return True
+
+def read_log(path):
+	result = []
+	with open(path) as hdr:
+		for line in hdr:
+			line = line.split('\t')
+			result.append( (line[1], read_can(line[-1])) )
+	return result
 
 def main():
 	parser = argparse.ArgumentParser(description='')
 	# selfdir = os.path.dirname(__file__)
-	parser.add_argument('--what', help='description of message')
+	parser.add_argument('--what', help='description of message or code of name')
+	parser.add_argument('--find', help='find messages in log')
+	parser.add_argument('-l', help='log file')
 	parser.add_argument('-a', help='architect')
 	# add argument --frequency
 	args = vars(parser.parse_args())
@@ -186,6 +225,13 @@ def main():
 			utils.print_val(can_m)
 		else:
 			utils.print_name(mess)
+		return
+	if args['find']:
+		# parse message mask or just key
+		# read log
+		# ???
+		# PROFIT!!!
+		pass
 
 if __name__ == '__main__':
 	main()
