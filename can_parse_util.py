@@ -11,7 +11,7 @@ class CanTemplate(object):
 	def __init__(self, signals, name=None):
 		super().__init__()
 		self.name = name
-		#self.signals = signals
+		# self.signals = signals
 		self.signals = {sig['name'] : (sig['start_bit'], sig['bit_length']) for sig in signals}
 	def get_val(self, signame, can):
 		signal = self.signals[signame]
@@ -53,8 +53,8 @@ class CANBase(object):
 	@classmethod
 	def arch(cls, archname):
 		acc = []
-		for can in cls.zip_base.keys():
-			acc.append(cls(self, archname, can))
+		for can in cls.zip_base[archname].keys():
+			acc.append(cls(archname, can))
 		return acc
 	def __init__(self, architect, cantype):
 		super().__init__()
@@ -63,14 +63,31 @@ class CANBase(object):
 		orig = self.__class__.zip_base[architect][cantype]
 		self.by_id = {}
 		self.name_to_id = {}
-		js = json.loads(bz2.decompress(binascii.unhexlify(orig)))
+		js = eval(bz2.decompress(binascii.unhexlify(orig)))
 		for key,val in js.items():
-			self.by_id[key] = CanTemplate(val['signals'], val['name'])
+			self.by_id[int(key)] = CanTemplate(val['signals'], val['name'])
 			self.name_to_id[val['name']] = key
 	def get_name(self, name):
 		return self.by_id[self.name_to_id[name]]
 	def get_id(self, id):
 		return self.by_id[id]
+	def all_id(self):
+		return self.by_id.keys()
+	def all_names():
+		return self.name_to_id.keys()
+
+# def base_out(zipped, path):
+# 	txt = bz2.decompress(binascii.unhexlify(zipped))
+# 	txt = {int(key) : val for key,val in json.loads(txt).items()}
+# 	open(path, 'wt').write(str(txt))
+
+# base_out(CANBase.zip_base['Atlantis']['BHCAN'], 'atl-bh')
+# base_out(CANBase.zip_base['Atlantis']['C1CAN'], 'atl-c1')
+# base_out(CANBase.zip_base['PNET']['BHCAN'], 'pnet-bh')
+# base_out(CANBase.zip_base['PNET']['CCAN'], 'pnet-cc')
+# base_out(CANBase.zip_base['CUSW']['BHCAN'], 'cusw-bh')
+# base_out(CANBase.zip_base['CUSW']['CCAN'], 'cusw-cc')
+
 
 class Utils(object):
 	def __init__(self, arch):
@@ -101,20 +118,25 @@ def test():
 	a = read_can("03F2 00 00 04 00 00 00")
 	b = read_can("03F2 00 10 04 00 00 00")
 	c = read_can("03F2 00 00 C4 00 00 00")
-	templ = CanTemplate({'key1' : (8,8), 'key2' : (16, 4)})
+	CANBase.arch('PNET')[0]
+	templ = CanTemplate()
 	print(templ.compare(a,b,['key1']))
 	print(templ.compare(a,b,['key2']))
 	print(templ.compare(a,b))
 	print(templ.compare(a,c,['key2']))
 
-parser = argparse.ArgumentParser(description='', formatter_class=RawTextHelpFormatter)
-selfdir = os.path.dirname(__file__)
-parser.add_argument('--what', help='description of message')
-parser.add_argument('-a', help='architect')
-# add argument --frequency
-args = vars(parser.parse_args())
-if args['a'] is None:
-	print('no arch')
-	exit()
-if args['what']:
-	Utils(args['a']).print_val(args['what'])
+def main():
+	parser = argparse.ArgumentParser(description='', formatter_class=RawTextHelpFormatter)
+	selfdir = os.path.dirname(__file__)
+	parser.add_argument('--what', help='description of message')
+	parser.add_argument('-a', help='architect')
+	# add argument --frequency
+	args = vars(parser.parse_args())
+	if args['a'] is None:
+		print('no arch')
+		exit()
+	if args['what']:
+		Utils(args['a']).print_val(args['what'])
+
+if __name__ == '__main__':
+	test()
