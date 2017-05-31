@@ -1,3 +1,6 @@
+## TODO
+# Don't convert ,essage to single int. Just use bytes
+
 import bz2
 import binascii
 import json
@@ -13,6 +16,8 @@ class CanTemplate(object):
 		self.name = name
 		self.signals = {sig['N'] : (sig['SB'], sig['BL'], sig['BE']) for sig in signals}
 	def get_val(self, signame, can):
+		## TODO 
+		# change this function to work with bytes
 		signal = self.signals[signame]
 		val = can[1]
 		val = val >> signal[0]
@@ -93,7 +98,7 @@ class Utils(object):
 		for base in self.bases:
 			try:
 				templ = base.get_id(mess[0])
-				print('IN BASE %s FOUND' % (base.can, templ.name) )
+				print('IN BASE %s FOUND %s' % (base.can, templ.name) )
 				for name in templ.signals.keys():
 					print('\t%s = %s' % (name, templ.get_val(name, mess)))
 				found = True
@@ -107,17 +112,22 @@ def read_can(text):
 	key = int(split[0], 16)
 	split = split[1:]
 	split.reverse()
-	val = int(''.join(split), 16)
+	# val = int(''.join(split), 16)
+	val = binascii.unhexlify(''.join(split))
 	return (key,val)
 
 def test():
 	a = read_can("03F2 00 00 04 00 00 00")
 	b = read_can("03F2 00 10 04 00 00 00")
-	c = read_can("03F2 00 00 C4 00 00 00")
+	c = read_can("03F2 ff ff ff ff ff ff")
 	base = CANBase.arch('PNET')[0]
 	templ = base.get_id(list(base.all_id())[0])
 	print('keys:', templ.keys())
 	print(templ.compare(a,b,['ETC_CONTROL_STAT']))
+	utils = Utils('PNET')
+	utils.print_val(a)
+	utils.print_val(b)
+	utils.print_val(c)
 	# print(templ.compare(a,b,['key2']))
 	# print(templ.compare(a,b))
 	# print(templ.compare(a,c,['key2']))
