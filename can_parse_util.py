@@ -5,6 +5,13 @@ import bz2
 import binascii
 import json
 import argparse
+from bitarray import bitarray
+
+def bits_to_int(bits):
+	acc = 0 
+	for b in bits:
+		acc = (acc << 1) | b
+	return acc
 
 class CanTemplate(object):
 	"""
@@ -18,10 +25,20 @@ class CanTemplate(object):
 	def get_val(self, signame, can):
 		## TODO 
 		# change this function to work with bytes
+
+		# signal = self.signals[signame]
+		# val = can[1]
+		# val = val >> signal[0]
+		# return val & ((2 ** signal[1]) - 1)
+
 		signal = self.signals[signame]
-		val = can[1]
-		val = val >> signal[0]
-		return val & ((2 ** signal[1]) - 1)
+		b_start = signal[0]
+		b_len   = signal[1]
+		is_big  = signal[2]
+		val = can[1][b_start:b_start + b_len]
+		if is_big:
+			val.reverse()
+		return bits_to_int(val)
 	def compare(self, can1, can2, signals=None):
 		if signals is None:
 			signals = self.signals.keys()
@@ -106,14 +123,30 @@ class Utils(object):
 				continue
 		if not found:
 			print('NOT FOUND')
+	def print_name(self, mess_name):
+		found = False
+		for base in self.bases:
+			try:
+				id = base.name_to_id[mess_name]
+				print('IN BASE %s FOUND %s' % (base.can, hex(id)[2:]))
+				found = True
+			except KeyError:
+				continue
+		if not found:
+			print('NOT FOUND')
 
 def read_can(text):
 	split = text.split(' ')
 	key = int(split[0], 16)
 	split = split[1:]
-	split.reverse()
-	# val = int(''.join(split), 16)
-	val = binascii.unhexlify(''.join(split))
+	# split.reverse()
+	val = bitarray()
+	mess = ''.join(split)
+	if len(mess) > 16:
+		raise Exception('read_CAN', 'message very long')
+	for i in range(16 - len(mess)):
+		mess += '0'
+	val.frombytes(binascii.unhexlify(mess))
 	return (key,val)
 
 def test():
@@ -133,8 +166,8 @@ def test():
 	# print(templ.compare(a,c,['key2']))
 
 def main():
-	parser = argparse.ArgumentParser(description='', formatter_class=RawTextHelpFormatter)
-	selfdir = os.path.dirname(__file__)
+	parser = argparse.ArgumentParser(description='')
+	# selfdir = os.path.dirname(__file__)
 	parser.add_argument('--what', help='description of message')
 	parser.add_argument('-a', help='architect')
 	# add argument --frequency
@@ -143,7 +176,16 @@ def main():
 		print('no arch')
 		exit()
 	if args['what']:
-		Utils(args['a']).print_val(args['what'])
+		utils = Utils(args['a'])
+		mess = args['what']
+		try:
+			can_m = read_can(mess)
+		except:
+			can_m = None
+		if can_m:
+			utils.print_val(can_m)
+		else:
+			utils.print_name(mess)
 
 if __name__ == '__main__':
-	test()
+	main()
