@@ -1,5 +1,3 @@
-## TODO
-# Don't convert ,essage to single int. Just use bytes
 
 import bz2
 import binascii
@@ -7,6 +5,7 @@ import json
 import argparse
 from bitarray import bitarray
 import struct
+import re
 
 INT1 = struct.Struct('>B')
 INT2 = struct.Struct('>H')
@@ -24,19 +23,12 @@ class CanTemplate(object):
 		docstring for CanTemplate
 		signals : {name : (bitstart, bitlen, is_big_endian)}
 	"""
-	def __init__(self, signals, name=None):
+	def __init__(self, signals, name=None, id=None):
 		super().__init__()
-		self.name = name
+		self.name    = name
+		self.id      = id
 		self.signals = {sig['N'] : (sig['SB'], sig['BL'], sig['BE']) for sig in signals}
 	def get_val(self, signame, can):
-		## TODO 
-		# change this function to work with bytes
-
-		# signal = self.signals[signame]
-		# val = can[1]
-		# val = val >> signal[0]
-		# return val & ((2 ** signal[1]) - 1)
-
 		signal = self.signals[signame]
 		b_start = signal[0]
 		b_len   = signal[1]
@@ -102,7 +94,7 @@ class CANBase(object):
 		for key,val in js.items():
 			key = int(key)
 			name = val['N']
-			self.by_id[key] = CanTemplate(val['S'], name)
+			self.by_id[key] = CanTemplate(val['S'], name, key)
 			self.name_to_id[name] = key
 	def get_name(self, name):
 		return self.by_id[self.name_to_id[name]]
@@ -163,19 +155,27 @@ class MessageMask(object):
 		only check value
 		for read_bytes used big endian
 	'''
-	def __init__(self, mask):
+	def __init__(self, signals, mask, template):
+		# signals : [(name,value)]
+		self.signals = signals
+		# binary mask
 		self.mask = mask
+		self.template = template
+		if self.mask is None:
+			self.match = self._match_bin
+		else:
+			self.match = self._match_sigs
 
 	@classmethod
 	def read_bits(cls, text):
-		mask = [2 if (c == 'x' or c == 'X') else int(c) for c in text]
-		return cls(bytes(mask))
+		mask = [2 if (c == '.') else int(c) for c in text]
+		return cls(None, bytes(mask), None)
 
 	@classmethod
 	def read_bytes(cls, text):
 		mask = []		
 		for c in ''.join(text.split(' ')):
-			if c == 'x' or c == 'X':
+			if c == '.':
 				mask.extend([2,2,2,2])
 			else:
 				txt = bin(int(c, 16))[2:]
@@ -183,14 +183,37 @@ class MessageMask(object):
 				for _ in range(4 - len(val)):
 					txt = [0] + val
 				mask.extend(val)
-		return cls(bytes(mask))
+		return cls(None, bytes(mask), None)
 
-	def match(self, canmess):
+	@classmethod
+	def read_signals(cls, template, text):
+		''' format: a=12, b=b010110, c=x3f4 ... '''
+		ID  = re.compile('[a-zA-Z_][a-zA-Z_0-9]*')
+		def read_pair(text):
+			pair = text.split('=')
+			try:
+				assert len(pair) == 2
+				key = pair[0].strip()
+				assert ID.match(key)
+				val = int(pair[1].strip(), 0)
+			except:
+				raise Exception('MessageMask.read_signals', 'incorrect signals format')
+			return (key,val)
+		signals = [read_pair(pair) for pair in text.split(',')]
+		return cls(signals, None, template)
+
+	def _match_bin(self, canmess):
 		mask = self.mask
-		# mess = canmess[1]
+		canmess = canmess[1]
 		for i in range(64):
 			bit = mask[i]
 			if bit != 2 and bit != canmess[i]:
+				return False
+		return True
+
+	def _match_sigs(self, canmess):
+		for sig in self.signals:
+			if self.template.get_val(sig[0], canmess) != sig[1]:
 				return False
 		return True
 
@@ -207,6 +230,7 @@ def main():
 	# selfdir = os.path.dirname(__file__)
 	parser.add_argument('--what', help='description of message or code of name')
 	parser.add_argument('--find', help='find messages in log')
+	parser.add_argument('-m', help='mask for finder')
 	parser.add_argument('-l', help='log file')
 	parser.add_argument('-a', help='architect')
 	# add argument --frequency
@@ -227,11 +251,30 @@ def main():
 			utils.print_name(mess)
 		return
 	if args['find']:
-		# parse message mask or just key
-		# read log
-		# ???
-		# PROFIT!!!
-		pass
+		key = args['find']
+		template = ...
+		## TODO read key and template
+		mask = None
+		if args['m']:
+			src = args['m']
+			if src[0] == 'b':
+				mask = MessageMask.read_bits(src[1:])
+			elif src[0] == 'x':
+				mask = MessageMask.read_bytes(src[1:])
+			elif src[0] == '{':
+				mask = MessageMask.read_signals(template, src)
+			else:
+				print('incorrect mask format')
+				return
+		if 'l' not in args:
+			print('log not setted')
+			return
+		log = read_log(args['l'])
+		for line in log:
+			index = line[0]
+			can   = line[1]
+			if can[0] == template.id and (mask is None or mask.match(can)):
+				print(index)
 
 if __name__ == '__main__':
 	main()
