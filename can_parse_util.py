@@ -55,6 +55,7 @@ class CanTemplate(object):
 	def keys(self):
 		return self.signals.keys()
 
+
 class CANBase(object):
 	"""
 		format of zipped data:
@@ -102,8 +103,12 @@ class CANBase(object):
 		return self.by_id[id]
 	def all_id(self):
 		return self.by_id.keys()
-	def all_names():
+	def all_names(self):
 		return self.name_to_id.keys()
+	def all_signals(self):
+		for mess in self.by_id.values():
+			for key in mess.keys():
+				yield key
 
 class Utils(object):
 	def __init__(self, arch):
@@ -237,7 +242,7 @@ def main():
 	args = vars(parser.parse_args())
 	if args['a'] is None:
 		print('no arch')
-		exit()
+		return
 	if args['what']:
 		utils = Utils(args['a'])
 		mess = args['what']
@@ -252,7 +257,7 @@ def main():
 		return
 	if args['find']:
 		key = args['find']
-		template = ...
+		# template = ...
 		## TODO read key and template
 		mask = None
 		if args['m']:
