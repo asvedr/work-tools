@@ -52,6 +52,8 @@ class CanTemplate(object):
 			val = self.get_val(can, name)
 			if val != 0:
 				yield (name, val)
+	def contain_signal(self, signame):
+		return signame in self.signals
 	def keys(self):
 		return self.signals.keys()
 
@@ -137,6 +139,16 @@ class Utils(object):
 				continue
 		if not found:
 			print('NOT FOUND')
+	def _get_mess(self, func):
+		for base in self.bases:
+			try:
+				yield func(base)
+			except:
+				pass
+	def get_mess_id(self,id):
+		return list(self._get_mess_n_base(lambda base: base.get_id(id)))
+	def get_mess_name(self,name):
+		return list(self._get_mess_n_base(lambda base: base.get_name(name)))
 
 def read_can(text):
 	''' read mess like this 03f 00 04 00 11 00 00 00 00 '''
@@ -200,6 +212,7 @@ class MessageMask(object):
 				assert len(pair) == 2
 				key = pair[0].strip()
 				assert ID.match(key)
+				assert template.contain_signal(key)
 				val = int(pair[1].strip(), 0)
 			except:
 				raise Exception('MessageMask.read_signals', 'incorrect signals format')
@@ -226,8 +239,8 @@ def read_log(path):
 	result = []
 	with open(path) as hdr:
 		for line in hdr:
-			line = line.split('\t')
-			result.append( (line[1], read_can(line[-1])) )
+			split = line.split('\t')
+			result.append( (line, split[1], read_can(split[-1])) )
 	return result
 
 def main():
@@ -235,7 +248,8 @@ def main():
 	# selfdir = os.path.dirname(__file__)
 	parser.add_argument('--what', help='description of message or code of name')
 	parser.add_argument('--find', help='find messages in log')
-	parser.add_argument('-m', help='mask for finder')
+	parser.add_argument('-m', help='mask for find mode')
+	parser.add_argument('-o', help='out file for find mode')
 	parser.add_argument('-l', help='log file')
 	parser.add_argument('-a', help='architect')
 	# add argument --frequency
@@ -257,29 +271,68 @@ def main():
 		return
 	if args['find']:
 		key = args['find']
-		# template = ...
-		## TODO read key and template
-		mask = None
+		templates = []
+		try:
+			key = int(key,16)
+			templates = utils.get_mess_id(key)
+		except:
+			templates = utils.get_mess_name(key)
+		if len(templates) == 0:
+			print('no mess %s found' % key)
+			return
+		if templates[0].id == templates[1].id:
+			del templates[1]
+		mask = []
 		if args['m']:
 			src = args['m']
 			if src[0] == 'b':
-				mask = MessageMask.read_bits(src[1:])
+				for _ in templates:
+					mask.append(MessageMask.read_bits(src[1:]))
 			elif src[0] == 'x':
-				mask = MessageMask.read_bytes(src[1:])
+				for _ in templates:
+					mask.append(MessageMask.read_bytes(src[1:]))
 			elif src[0] == '{':
-				mask = MessageMask.read_signals(template, src)
+				correct_mask_exist = False
+				for template in templates:
+					try:
+						mask.append(MessageMask.read_signals(template, src))
+						correct_mask_exist = True
+					except:
+						mask.append(None)
+				if not correct_mask_exist:
+					print('mask incorrect')
+					return
 			else:
 				print('incorrect mask format')
 				return
 		if 'l' not in args:
 			print('log not setted')
 			return
+		out = None
+		if 'o' in args:
+			out = open(args['o'], 'wt')
+		def write_out(line):
+			if out:
+				out.write(line[0])
+				out.write('\n')
 		log = read_log(args['l'])
 		for line in log:
-			index = line[0]
-			can   = line[1]
-			if can[0] == template.id and (mask is None or mask.match(can)):
-				print(index)
+			index = line[1]
+			can   = line[2]
+			for i in range(len(templates)):
+				template = templates[i]
+				if len(mask) == 0:
+					if can[0] == template.id:
+						print(index)
+						write_out(line)
+				if mask[i] is None:
+					continue
+				else:
+					if can[0] == template.id and mask[i].match(can):
+						print(index)
+						write_out(line)
+		if out:
+			out.close()
 
 if __name__ == '__main__':
 	main()
