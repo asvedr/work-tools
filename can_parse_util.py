@@ -146,9 +146,9 @@ class Utils(object):
 			except:
 				pass
 	def get_mess_id(self,id):
-		return list(self._get_mess_n_base(lambda base: base.get_id(id)))
+		return list(self._get_mess(lambda base: base.get_id(id)))
 	def get_mess_name(self,name):
-		return list(self._get_mess_n_base(lambda base: base.get_name(name)))
+		return list(self._get_mess(lambda base: base.get_name(name)))
 
 def read_can(text):
 	''' read mess like this 03f 00 04 00 11 00 00 00 00 '''
@@ -178,7 +178,7 @@ class MessageMask(object):
 		# binary mask
 		self.mask = mask
 		self.template = template
-		if self.mask is None:
+		if self.mask:
 			self.match = self._match_bin
 		else:
 			self.match = self._match_sigs
@@ -217,6 +217,7 @@ class MessageMask(object):
 			except:
 				raise Exception('MessageMask.read_signals', 'incorrect signals format')
 			return (key,val)
+		text = text.split('{')[1].split('}')[0]
 		signals = [read_pair(pair) for pair in text.split(',')]
 		return cls(signals, None, template)
 
@@ -239,8 +240,12 @@ def read_log(path):
 	result = []
 	with open(path) as hdr:
 		for line in hdr:
-			split = line.split('\t')
-			result.append( (line, split[1], read_can(split[-1])) )
+			split = line[:-1].split('\t')
+			try:
+				result.append( (line, split[1], read_can(split[-1])) )
+			except Exception as e:
+				pass
+				# print(split, e)
 	return result
 
 def main():
@@ -257,8 +262,8 @@ def main():
 	if args['a'] is None:
 		print('no arch')
 		return
+	utils = Utils(args['a'])
 	if args['what']:
-		utils = Utils(args['a'])
 		mess = args['what']
 		try:
 			can_m = read_can(mess)
@@ -305,11 +310,11 @@ def main():
 			else:
 				print('incorrect mask format')
 				return
-		if 'l' not in args:
+		if args['l'] is None:
 			print('log not setted')
 			return
 		out = None
-		if 'o' in args:
+		if args['o']:
 			out = open(args['o'], 'wt')
 		def write_out(line):
 			if out:
@@ -317,19 +322,19 @@ def main():
 				out.write('\n')
 		log = read_log(args['l'])
 		for line in log:
-			index = line[1]
+			index = line[0]
 			can   = line[2]
 			for i in range(len(templates)):
 				template = templates[i]
 				if len(mask) == 0:
 					if can[0] == template.id:
-						print(index)
+						print(index, end='')
 						write_out(line)
-				if mask[i] is None:
+				elif mask[i] is None:
 					continue
 				else:
 					if can[0] == template.id and mask[i].match(can):
-						print(index)
+						print(index, end='')
 						write_out(line)
 		if out:
 			out.close()
